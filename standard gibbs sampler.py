@@ -20,3 +20,14 @@ def initialisation(p, a0, b0, nu=1):
         beta[j] = np.random.normal(0, sigma_sq / (eta[j] * zeta))
     return beta.tolist(), sigma_sq, zeta, eta.tolist()
 initialisation(2,1,1)
+
+# Mise à jour séquentielle de zeta grâce à une distribution de Cauchy
+def maj_eta_j(beta, sigma_sq, zeta, nu, j):
+    m_tj = zeta * (beta[j]**2) / (2 * sigma_sq)
+    u = np.random.uniform(size=1)
+    eta_t = (np.exp(-m_tj * u)) / (u**((1 - nu) / 2) * (1 + nu * u)**((nu + 1) / 2))
+    return eta_t
+    print(eta_t)
+
+maj_eta_j([1],1,1,1,0)
+
