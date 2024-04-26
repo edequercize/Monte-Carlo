@@ -44,6 +44,7 @@ def maj_eta(beta,sigma_sq,zeta,nu):
 import numpy as np
 
 def maj_zeta(beta, zeta, eta, nu, sigma_mrth):
+    #σ MRTH represents the standard deviation of the normal proposal distribution used for the Metropolis step
     p = len(beta)
     for j in range(p):
         # Proposer une nouvelle valeur pour log(zeta[j]) avec une proposition normale
