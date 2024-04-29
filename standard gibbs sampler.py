@@ -1,65 +1,128 @@
 import numpy as np
-import time
+import pandas as pd
+from scipy.stats import invgamma, multivariate_normal, t, gamma
+from numpy.linalg import cholesky
 
-def half_t_sample(nu):
-    u = np.random.uniform(size=1)
-    eta = 1 / (u**((2 - nu) / 2) * (1 + nu * u)**((nu + 1) / 2))
-    return eta
-#La fonction half_t_sample(nu) retourne un échantillon tiré de cette distribution half-t avec le paramètre de degré de liberté nu. 
-#Ce paramètre contrôle à quel point la distribution est "épaisse" autour de zéro. 
-# Plus nu est grand, plus la queue de la distribution devient lourde, ce qui signifie qu'elle assigne plus de probabilité aux valeurs éloignées de zéro.
+np.random.seed(200)
 
-# Initialisation des paramètres
-def initialisation(p, a0, b0, nu=1):
-    sigma_sq = 1 / np.random.gamma(a0, 1/b0)
-    beta = np.zeros(p)
-    eta = np.zeros(p)
-    zeta = (abs(np.random.standard_cauchy()))**(-2)
+# Nombre d'observations
+nombre_observations = 50
+
+# Matrice de modèle simulée
+X = np.column_stack([np.ones(nombre_observations), np.random.normal(0, 1, nombre_observations),
+                     np.random.normal(5, 10, nombre_observations), np.random.normal(100, 10, nombre_observations)])
+
+# Vrais coefficients beta
+vrais_coefficients_beta = np.array([1000, 50, -50, 10])
+
+# Vraie valeur de phi
+vraie_phi = 10000
+matrice_identite = np.eye(nombre_observations)  # Matrice identité utilisée pour la matrice de covariance
+
+# Simuler la variable dépendante pour la régression
+y = multivariate_normal.rvs(mean=np.dot(X, vrais_coefficients_beta),
+                            cov=vraie_phi * matrice_identite)
+
+# Valeurs initiales
+n, p = X.shape
+beta_init = np.zeros(p)
+eta = np.zeros(p)
+zeta = 0
+sigma_sq = 1
+num_iterations = 1000
+nu = 2
+
+# Fonction pour calculer mu_j
+def compute_mu_j(beta, X, y, eta, sigma_sq, j):
+    eta_j = eta[j]
+    n = X.shape[0]
+    mu_j = np.sum(X[:, j] * (y - np.dot(X, beta) + X[:, j] * beta[j])) / (X[:, j].dot(X[:, j]) / eta_j + 1 / sigma_sq)
+    return mu_j
+
+# Fonction pour calculer sigma_j^2
+def compute_sigma_j_sq(X, eta, sigma_sq, j):
+    eta_j = eta[j]
+    sigma_j_sq = 1 / (X[:, j].dot(X[:, j]) / eta_j + 1 / sigma_sq)
+    return sigma_j_sq
+
+def target_density_eta(eta, beta, sigma_sq, zeta, nu):
+    """
+    Calcul de la densité a posteriori conditionnelle de eta_t+1.
+
+    Arguments :
+    eta : Valeurs échantillonnées de eta_t+1.
+    beta : Vecteur de coefficients beta_t.
+    sigma_sq : Variance sigma_t^2.
+    zeta : Valeur zeta_t.
+    nu : Paramètre nu.
+
+    Returns :
+    posterior_density : Densité a posteriori conditionnelle de eta_t+1.
+    """
+    p = len(eta)
+    posterior_density = 1
+
     for j in range(p):
-        eta[j] = half_t_sample(nu)
-        beta[j] = np.random.normal(0, sigma_sq / (eta[j] * zeta))
-    return beta.tolist(), sigma_sq, zeta, eta.tolist()
-initialisation(2,1,1)
+        m_tj = zeta * beta[j]**2 / (2 * sigma_sq)
+        # Terme exponentiel
+        exp_term = np.exp(-m_tj * eta[j])
+        # Terme de normalisation
+        normalization_term = eta[j]**((1 - nu) / 2) * (1 + nu * eta[j])**(nu + 1)
+        # Mise à jour de la densité a posteriori conditionnelle
+        posterior_density *= exp_term / normalization_term
 
-# Mise à jour séquentielle de zeta grâce à une distribution de Cauchy
-def maj_eta_j(beta, sigma_sq, zeta, nu, j):
-    m_tj = zeta * (beta[j]**2) / (2 * sigma_sq)
-    u = np.random.uniform(size=1)
-    eta_t = (np.exp(-m_tj * u)) / (u**((1 - nu) / 2) * (1 + nu * u)**((nu + 1) / 2))
-    return eta_t
-    print(eta_t)
-maj_eta_j([1],1,1,1,0)
+    return posterior_density
 
-def maj_zeta(beta, zeta, eta, nu, sigma_mrth):
-    p = len(beta)
-    for j in range(p):
-        # Proposer une nouvelle valeur pour log(zeta[j]) avec une proposition normale
-        log_zeta_prop = np.log(zeta[j]) + np.random.normal(scale=sigma_mrth)
-        zeta_prop = np.exp(log_zeta_prop)
-        # Calculer la densité de probabilité de la nouvelle proposition
-        density_prop = np.prod(np.sqrt((1 + nu * eta[j]**2) / zeta_prop) * np.exp(-(beta[j]**2) / (2 * zeta_prop * (1 + nu * eta[j]**2))))
-        # Calculer la densité de probabilité de l'état actuel
-        density_current = np.prod(np.sqrt((1 + nu * eta[j]**2) / zeta[j]) * np.exp(-(beta[j]**2) / (2 * zeta[j] * (1 + nu * eta[j]**2))))
-        # Calculer le ratio de probabilité de transition
-        ratio = density_prop / density_current
-        # Accepter ou rejeter la proposition
-        if np.random.uniform() < min(1, ratio):
-            zeta[j] = zeta_prop
-    return zeta
-maj_zeta([1], [1], [1], 1, 0.2)
+def slice_sampling_eta(num_features, beta, sigma_sq, zeta, nu, initial_value_eta, num_samples, step_size=1.0):
+    samples_eta = [initial_value_eta]
 
-# Mise à jour séquentielle de beta
-def maj_beta_j(X, y, sigma_sq, zeta, eta, j):
-    n, p = X.shape
-    XtX = np.dot(X.T, X)
-    eta = np.array(eta)
-    XtX_inv = np.linalg.inv(XtX + np.diag(1.0 / eta))
-    beta = np.dot(XtX_inv, np.dot(X.T, y)) / sigma_sq
-    return beta[j]
+    for _ in range(num_samples):
+        current_value_eta = samples_eta[-1]
+        # Étape de "slice"
+        height_eta = np.random.uniform(0, target_density_eta(current_value_eta, beta, sigma_sq, zeta, nu))
+        # Étape de réduction de la tranche
+        left_eta = current_value_eta - np.random.exponential(scale=step_size)
+        right_eta = left_eta + step_size
+        while target_density_eta(left_eta, beta, sigma_sq, zeta, nu) < height_eta:
+            left_eta -= step_size
+        while target_density_eta(right_eta, beta, sigma_sq, zeta, nu) < height_eta:
+            right_eta += step_size
+        # Étape d'échantillonnage
+        new_value_eta = np.random.uniform(left_eta, right_eta)
+        samples_eta.append(new_value_eta)
 
-X = np.array([[1, 2], [3, 4]])
-maj_beta_j(X, 1, 1, [1], [1], 0)
+    return samples_eta[1:]  # On retire la valeur initiale
 
 
+# Fonction pour l'échantillonnage de Gibbs
+def gibbs_sampling(X, y, beta_init, eta_init, zeta_init, sigma_sq, num_iterations, nu):
+    num_features = X.shape[1]
+    zeta = zeta_init
+    eta = eta_init
+    # Boucle sur le nombre d'itérations
+    for t in range(num_iterations):
+        beta_new = beta_init
+        eta = slice_sampling_eta(num_features, beta_new, sigma_sq, zeta, nu, eta, 1)
+        zeta = sample_zeta(zeta, eta, sigma_sq, sigma_mrth=0.8)
 
+        # Boucle sur chaque coordonnée beta_j
+        for j in range(num_features):
+            mu_j = compute_mu_j(beta_new, X, y, eta, sigma_sq, j)
+            sigma_j_sq = compute_sigma_j_sq(X, eta, sigma_sq, j)
+            beta_new[j] = np.random.normal(mu_j, np.sqrt(sigma_j_sq))
 
+        # Mettre à jour les coordonnées beta pour l'itération suivante
+        beta_current = beta_new
+
+    return beta_current
+
+# Valeurs initiales
+n, p = X.shape
+beta_init = np.zeros(p)
+eta = np.zeros(p)
+zeta = 0
+sigma_sq = 1
+num_iterations = 1000
+nu = 2
+
+print(gibbs_sampling(X, y, beta_init, eta, sigma_sq, num_iterations, nu))
