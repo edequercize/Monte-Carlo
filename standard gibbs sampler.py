@@ -39,11 +39,11 @@ def compute_mu_j(beta, X, y, eta, sigma_sq, j):
     mu_j = np.sum(X[:, j] * (y - np.dot(X, beta) + X[:, j] * beta[j])) / (X[:, j].dot(X[:, j]) / eta_j + 1 / sigma_sq)
     return mu_j
 
-# Fonction pour calculer sigma_j^2
 def compute_sigma_j_sq(X, eta, sigma_sq, j):
-    eta_j = eta[j]
-    sigma_j_sq = 1 / (X[:, j].dot(X[:, j]) / eta_j + 1 / sigma_sq)
+    sigma_j_sq = 1 / (np.sum(X[:, j]**2) / eta[j] + 1 / sigma_sq)
+    assert sigma_j_sq.shape == (), f"sigma_j_sq should be a scalar, but its shape is {sigma_j_sq.shape}"
     return sigma_j_sq
+    print(sigma_j_sq)
 
 # Fonction pour évaluer la fonction de densité de la distribution conditionnelle de chaque composante de 𝜼_t
 def cond_density_eta(eta_j, beta, sigma2, mu, X, y):
