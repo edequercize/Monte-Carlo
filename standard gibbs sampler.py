@@ -205,7 +205,7 @@ ax.scatter(xpos, ypos, dz, c='b', marker='o')
 ax.set_xlabel('Dimension 1')
 ax.set_ylabel('Dimension 2')
 ax.set_zlabel('Frequency')
-ax.set_title('Blocked Gibbs Sampling (dim = 2)')
+ax.set_title('Standard Gibbs Sampling (dim = 2)')
 plt.show()
     
 
