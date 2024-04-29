@@ -206,8 +206,6 @@ ax.set_xlabel('Dimension 1')
 ax.set_ylabel('Dimension 2')
 ax.set_zlabel('Frequency')
 ax.set_title('Blocked Gibbs Sampling (dim = 2)')
-path = "/home/onyxia/work/Monte-Carlo/"
-plt.savefig(path + 'test bgs.png')
 plt.show()
     
 
