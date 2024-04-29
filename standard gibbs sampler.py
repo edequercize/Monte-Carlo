@@ -5,15 +5,13 @@ from numpy.linalg import cholesky
 
 np.random.seed(200)
 
-# Nombre d'observations
-nombre_observations = 50
+nombre_observations = 10000
 
 # Matrice de modèle simulée
-X = np.column_stack([np.ones(nombre_observations), np.random.normal(0, 1, nombre_observations),
-                     np.random.normal(5, 10, nombre_observations), np.random.normal(100, 10, nombre_observations)])
+X = np.column_stack([np.random.normal(0, 1, nombre_observations), np.random.normal(0, 1, nombre_observations)])
 
 # Vrais coefficients beta
-vrais_coefficients_beta = np.array([1000, 50, -50, 10])
+vrais_coefficients_beta = np.array([1000, 50])
 
 # Vraie valeur de phi
 vraie_phi = 10000
@@ -26,16 +24,19 @@ y = multivariate_normal.rvs(mean=np.dot(X, vrais_coefficients_beta),
 # Valeurs initiales
 n, p = X.shape
 beta_init = np.ones(p)
+eta_init = np.ones(p)
 eta = np.ones(p)
 zeta = 1
-sigma_sq = 1
-num_iterations = 1000
+zeta_init = 1
+sigma_sq = 3
+num_iterations = 10000
 nu = 2
+mu=2
+print(n,p)
 
 # Fonction pour calculer mu_j
 def compute_mu_j(beta, X, y, eta, sigma_sq, j):
     eta_j = eta[j]
-    n = X.shape[0]
     mu_j = np.sum(X[:, j] * (y - np.dot(X, beta) + X[:, j] * beta[j])) / (X[:, j].dot(X[:, j]) / eta_j + 1 / sigma_sq)
     return mu_j
 
@@ -46,17 +47,18 @@ def compute_sigma_j_sq(X, eta, sigma_sq, j):
     print(sigma_j_sq)
 
 # Fonction pour évaluer la fonction de densité de la distribution conditionnelle de chaque composante de 𝜼_t
-def cond_density_eta(eta_j, beta, sigma2, mu, X, y):
+def cond_density_eta(eta_j, beta, sigma_sq, mu, X, y):
     # Calculer la matrice de covariance Sigma
     Sigma = np.linalg.inv(np.dot(X.T, X) + mu * np.eye(X.shape[1]))
     # Calculer le vecteur de moyenne m
     m = np.dot(Sigma, np.dot(X.T, y))
     # Calculer la valeur de la fonction de densité de la distribution conditionnelle de eta_j
-    density = np.exp(-mu * eta_j**2 / (2 * sigma2)) * np.exp(-np.dot(beta - m, np.dot(Sigma, beta - m)) / (2 * sigma2))
+    density = np.exp(-mu * eta_j**2 / (2 * sigma_sq)) * np.exp(-np.dot(beta - m, np.dot(Sigma, beta - m)) / (2 * sigma_sq))
     return density
+print(cond_density_eta(eta_j, beta_init, sigma_sq, mu, X, y))
 
 # Fonction pour implémenter le slice sampling pour chaque composante de 𝜼_t
-def slice_sampling_eta(beta, sigma2, mu, X, y, n_samples):
+def slice_sampling_eta(beta, sigma_sq, mu, X, y, n_samples):
     # Initialiser la matrice des échantillons de 𝜼_t
     eta_samples = np.zeros((n_samples, X.shape[1]))
     # Initialiser la valeur initiale de 𝜼_t
@@ -66,7 +68,7 @@ def slice_sampling_eta(beta, sigma2, mu, X, y, n_samples):
         # Itération du slice sampling pour chaque échantillon de 𝜼_t,j
         for i in range(n_samples):
             # Évaluer la fonction de densité de la distribution conditionnelle de eta_j à la valeur actuelle de eta_j
-            density = cond_density_eta(eta[j], beta, sigma2, mu, X, y)
+            density = cond_density_eta(eta[j], beta, sigma_sq, mu, X, y)
             # Générer une valeur aléatoire uniforme entre 0 et la valeur de la fonction de densité
             u = np.random.uniform(0, density)
             # Trouver l'intervalle horizontal qui contient u dans le graphique de la fonction de densité
@@ -74,9 +76,9 @@ def slice_sampling_eta(beta, sigma2, mu, X, y, n_samples):
             lower_bound = eta[j] - 1
             upper_bound = eta[j] + 1
             while True:
-                if cond_density_eta(lower_bound, beta, sigma2, mu, X, y) < u:
+                if cond_density_eta(lower_bound, beta, sigma_sq, mu, X, y) < u:
                     lower_bound = (lower_bound + eta[j]) / 2
-                elif cond_density_eta(upper_bound, beta, sigma2, mu, X, y) < u:
+                elif cond_density_eta(upper_bound, beta, sigma_sq, mu, X, y) < u:
                     upper_bound = (upper_bound + eta[j]) / 2
                 else:
                     break
@@ -88,61 +90,128 @@ def slice_sampling_eta(beta, sigma2, mu, X, y, n_samples):
             eta_samples[i, j] = eta[j]
     return eta_samples
 
-# Définir la fonction de proposition
-def prop_log_zeta(log_zeta_actuel, sigma_prop):
-    return np.random.normal(log_zeta_actuel, sigma_prop)
+print(slice_sampling_eta(beta_init, sigma_sq, mu, X, y, n_samples=10))
 
-# Définir la fonction pour mettre à jour zeta
-def metropolis_hastings_zeta(y, X, omega, zeta_actuel, sigma_prop, a_prior, b_prior, n_iter):
-    # Initialiser la chaîne de Markov pour zeta
-    zeta_chain = np.zeros(n_iter)
-    zeta_chain[0] = zeta_actuel
-    # Boucle pour les itérations du Gibbs sampling
-    for i in range(1, n_iter):
-        # Générer une nouvelle valeur proposée pour log(zeta)
-        log_zeta_prop = prop_log_zeta(np.log(zeta_actuel), sigma_prop)
-        # Calculer la vraisemblance marginale de y donné omega et la nouvelle valeur proposée de zeta
-        M = np.eye(len(y)) + 1/zeta_prop * X @ np.diag(1/omega) @ X.T
-        L_prop = np.linalg.det(M)**(-len(y)/2) * np.exp(-1/2 * y.T @ np.linalg.inv(M) @ y)
-        # Calculer la vraisemblance marginale de y donné omega et la valeur actuelle de zeta
-        M_actuel = np.eye(len(y)) + 1/zeta_actuel * X @ np.diag(1/omega) @ X.T
-        L_actuel = np.linalg.det(M_actuel)**(-len(y)/2) * np.exp(-1/2 * y.T @ np.linalg.inv(M_actuel) @ y)
-        # Calculer le rapport d'acceptation
-        alpha = min(1, L_prop * np.exp(-a_prior * log_zeta_prop - b_prior * np.exp(-log_zeta_prop)) / L_actuel * np.exp(-a_prior * np.log(zeta_actuel) - b_prior * zeta_actuel))
-        # Accepter ou rejeter la nouvelle valeur proposée
-        if np.random.rand() < alpha:
-            zeta_actuel = np.exp(log_zeta_prop)
-        # Enregistrer la valeur actuelle de zeta dans la chaîne de Markov
-        zeta_chain[i] = zeta_actuel
-    # Retourner la chaîne de Markov pour zeta
-    return zeta_chain
+def calculate_likelihood(y, zeta, eta, beta, sigma_sq):   
+    """
+    Calcul de la vraisemblance de y sachant zeta et eta.
+    
+    Arguments :
+    y : Vecteur des observations.
+    X : Matrice des prédicteurs.
+    beta: Échantillon de beta.
+    sigma_sq : Échantillon de sigma_sq.
+    zeta : Valeur de zeta_t+1.
+    eta : Vecteur des valeurs eta_t+1.
+
+    Returns :
+    log_likelihood : Log de la vraisemblance de y sachant zeta et eta.
+    """
+
+    # On calcule d'abord M_zeta_eta : 
+    M_zeta_eta = np.eye(n) + 1/zeta * X@np.diag(1/eta)@X.T
+
+    log_likelihood = -1/2 * np.log(np.linalg.det(M_zeta_eta)) - (1+n)/2 * np.log(1 + y.T@M_zeta_eta@y)
+    
+    return log_likelihood
+
+beta = beta_init
+print(calculate_likelihood(y, zeta, eta, beta, sigma_sq))
+
+
+def sample_zeta(zeta_previous, eta_sampled, beta, sigma, sigma_mrth=0.8): 
+    """
+    Échantillonne la valeur de zeta_t+1 conditionnellement à zeta_previous et eta_t+1.
+
+    Arguments :
+    zeta_previous : Valeur zeta_t.
+   eta_tplus1 : Valeur échantillonnée de eta_t+1.
+    y : Vecteur de données.
+    X : Matrice de design.
+    beta : Vecteur de coefficients beta_t.
+    sigma_sq : Variance sigma_t^2.
+    sigma_mrth : Écart-type de la proposition normale = 0.8 selon l'article.
+
+    Returns :
+    zeta_sampled : Valeur échantillonnée de zeta_t+1.
+    """
+
+    # Proposition d'un nouvel échantillon de log(zeta_t+1)
+    log_zeta_proposed = np.random.normal(np.log(zeta_previous), sigma_mrth)
+    
+    
+    # Calcul des termes de probabilité a priori
+    prior_current = -0.5 * zeta_previous ** 2
+    prior_proposed = -0.5 * np.exp(2 * log_zeta_proposed)
+
+    # On calcule la vraisemblance conditionnelle des données
+    log_likelihood = (calculate_likelihood(y, np.exp(log_zeta_proposed), eta_sampled, beta, sigma)) # cf fonction calculate_likelihood au dessus
+    
+    # Log-probabilité du log-posterior pour les valeurs actuelles et proposées
+    log_posterior_current = log_likelihood + prior_current
+    log_posterior_proposed = log_likelihood + prior_proposed
+    
+    # Calcul du ratio de probabilité
+    acceptance_ratio = np.exp(log_posterior_proposed - log_posterior_current)
+    
+    
+    # Acceptation ou rejet de la proposition
+    if np.random.uniform(0, 1) < acceptance_ratio:
+        zeta_sampled = np.exp(log_zeta_proposed)
+    else:
+        zeta_sampled = zeta_previous
+
+    return zeta_sampled
 
 # Fonction pour l'échantillonnage de Gibbs coordonnée par coordonnée
 def gibbs_sampling_coord(X, y, beta_init, eta_init, zeta_init, sigma_sq, num_iterations, nu):
-    num_features = X.shape[1]
     zeta = zeta_init
     eta = eta_init
     beta = beta_init
+    betas = [[] for _ in range(num_iterations)] 
     # Boucle sur le nombre d'itérations
     for t in range(num_iterations):
         # Mettre à jour chaque coordonnée de beta
-        for j in range(num_features):
+        for j in range(p):
             mu_j = compute_mu_j(beta, X, y, eta, sigma_sq, j)
             sigma_j_sq = compute_sigma_j_sq(X, eta, sigma_sq, j)
-            print(sigma_j_sq, j)
-            beta[j] = np.random.normal(mu_j, np.sqrt(max(sigma_j_sq, 0)))
+            beta[j] = np.random.normal(mu_j, sigma_j_sq)
+            betas[t].append(beta[j])
         # Mettre à jour chaque coordonnée de eta
-        eta = slice_sampling_eta(beta, sigma_sq, zeta, X, y, 1)
+        slice_sampling_eta(beta, sigma_sq, mu, X, y, n_samples=10)
         # Mettre à jour zeta
-        zeta = metropolis_hastings_zeta(y, X, eta, zeta, 0.5, 0, 0, 1)[0]
-    return beta, eta, zeta
+        zeta = sample_zeta(zeta, eta, beta, sigma_sq, sigma_mrth=0.8)
+    return betas, eta, zeta
+
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+betas = np.array(beta_samples)
+print( "betas:", betas)
+samples = betas
+fig = plt.figure(figsize=(10, 8))
+ax = fig.add_subplot(111, projection='3d')
+
+hist, xedges, yedges = np.histogram2d(samples[:, 0], samples[:, 1], bins=50)
+xpos, ypos = np.meshgrid(xedges[:-1] + 0.25, yedges[:-1] + 0.25, indexing="ij")
+xpos = xpos.ravel()
+ypos = ypos.ravel()
+zpos = np.zeros_like(xpos)
+
+dx = dy = 0.5 * np.ones_like(zpos)
+dz = hist.ravel()
+
+ax.scatter(xpos, ypos, dz, c='b', marker='o')
+
+ax.set_xlabel('Dimension 1')
+ax.set_ylabel('Dimension 2')
+ax.set_zlabel('Frequency')
+ax.set_title('Blocked Gibbs Sampling (dim = 2)')
+path = "/home/onyxia/work/Monte-Carlo/"
+plt.savefig(path + 'test bgs.png')
+plt.show()
+    
 
 
 
-# Échantillonnage de Gibbs coordonnée par coordonnée
-beta_samples, eta_samples, zeta_samples = gibbs_sampling_coord(X, y, beta_init, eta, zeta, sigma_sq, num_iterations, nu)
 
-# Afficher les résultats
-print("Estimation de beta :", np.mean(beta_samples, axis=0))
-print("Estimation de eta :", np.mean(eta_samples, axis=0))
-print("Estimation de zeta :", np.mean(zeta_samples))
