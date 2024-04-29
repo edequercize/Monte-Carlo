@@ -3,11 +3,11 @@ import pandas as pd
 from scipy.stats import invgamma, multivariate_normal, t, gamma
 from numpy.linalg import cholesky
 
-np.random.seed(200)
+# Nombre d'observations et de caractéristiques
+nombre_observations = 1000
+n, p = 1000, 2
 
-nombre_observations = 10000
-
-# Matrice de modèle simulée
+# Génération de X avec des valeurs proches de la vraie distribution
 X = np.column_stack([np.random.normal(0, 1, nombre_observations), np.random.normal(0, 1, nombre_observations)])
 
 # Vrais coefficients beta
@@ -18,21 +18,23 @@ vraie_phi = 10000
 matrice_identite = np.eye(nombre_observations)  # Matrice identité utilisée pour la matrice de covariance
 
 # Simuler la variable dépendante pour la régression
-y = multivariate_normal.rvs(mean=np.dot(X, vrais_coefficients_beta),
-                            cov=vraie_phi * matrice_identite)
+y = np.random.multivariate_normal(np.dot(X, vrais_coefficients_beta), vraie_phi * matrice_identite)
 
-# Valeurs initiales
-n, p = X.shape
-beta_init = np.ones(p)
+# Initialisation des valeurs initiales pour les coefficients beta
+# Utilisation des vrais coefficients avec un peu de bruit
+beta_init = vrais_coefficients_beta + np.random.normal(0, 10, p)  # Ajoute un bruit de moyenne 0 et d'écart-type 10
+
+# Initialisation des valeurs de eta et zeta
 eta_init = np.ones(p)
-eta = np.ones(p)
-zeta = 1
 zeta_init = 1
+
+# Autres paramètres
 sigma_sq = 3
-num_iterations = 10000
+num_iterations = 1000
 nu = 2
-mu=2
-print(n,p)
+mu = 2
+
+
 
 # Fonction pour calculer mu_j
 def compute_mu_j(beta, X, y, eta, sigma_sq, j):
@@ -55,7 +57,7 @@ def cond_density_eta(eta_j, beta, sigma_sq, mu, X, y):
     # Calculer la valeur de la fonction de densité de la distribution conditionnelle de eta_j
     density = np.exp(-mu * eta_j**2 / (2 * sigma_sq)) * np.exp(-np.dot(beta - m, np.dot(Sigma, beta - m)) / (2 * sigma_sq))
     return density
-print(cond_density_eta(eta_j, beta_init, sigma_sq, mu, X, y))
+
 
 # Fonction pour implémenter le slice sampling pour chaque composante de 𝜼_t
 def slice_sampling_eta(beta, sigma_sq, mu, X, y, n_samples):
@@ -90,7 +92,6 @@ def slice_sampling_eta(beta, sigma_sq, mu, X, y, n_samples):
             eta_samples[i, j] = eta[j]
     return eta_samples
 
-print(slice_sampling_eta(beta_init, sigma_sq, mu, X, y, n_samples=10))
 
 def calculate_likelihood(y, zeta, eta, beta, sigma_sq):   
     """
@@ -114,9 +115,6 @@ def calculate_likelihood(y, zeta, eta, beta, sigma_sq):
     log_likelihood = -1/2 * np.log(np.linalg.det(M_zeta_eta)) - (1+n)/2 * np.log(1 + y.T@M_zeta_eta@y)
     
     return log_likelihood
-
-beta = beta_init
-print(calculate_likelihood(y, zeta, eta, beta, sigma_sq))
 
 
 def sample_zeta(zeta_previous, eta_sampled, beta, sigma, sigma_mrth=0.8): 
@@ -183,10 +181,11 @@ def gibbs_sampling_coord(X, y, beta_init, eta_init, zeta_init, sigma_sq, num_ite
         zeta = sample_zeta(zeta, eta, beta, sigma_sq, sigma_mrth=0.8)
     return betas, eta, zeta
 
+betas, eta, zeta = gibbs_sampling_coord(X, y, beta_init, eta_init, zeta_init, sigma_sq, num_iterations, nu)
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-betas = np.array(beta_samples)
+betas = np.array(betas)
 print( "betas:", betas)
 samples = betas
 fig = plt.figure(figsize=(10, 8))
