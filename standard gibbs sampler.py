@@ -11,7 +11,7 @@ n, p = 1000, 2
 X = np.column_stack([np.random.normal(0, 1, nombre_observations), np.random.normal(0, 1, nombre_observations)])
 
 # Vrais coefficients beta
-vrais_coefficients_beta = np.array([1000, 50])
+vrais_coefficients_beta = np.array([10, 10])
 
 # Vraie valeur de phi
 vraie_phi = 10000
