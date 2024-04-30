@@ -78,5 +78,5 @@ ax.set_ylabel('Dimension 2')
 ax.set_zlabel('Frequency')
 ax.set_title('Metropolis-Hastings Sampling (Multidimensional)')
 path = "/home/onyxia/work/Monte-Carlo/"
-plt.savefig(path + 'test.png')
+plt.savefig(path + 'metropolis.png')
 plt.show()
